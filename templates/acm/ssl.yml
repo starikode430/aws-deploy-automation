@@ -1,0 +1,46 @@
+# @format
+
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Create the app SSL certificates
+
+Parameters:
+  ProjectName:
+    Type: String
+  ServerDomainName:
+    Type: String
+  ClientDomainName:
+    Type: String
+
+Resources:
+  ServerCertificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Ref "ServerDomainName"
+      DomainValidationOptions:
+        - DomainName: !Ref "ServerDomainName"
+          HostedZoneId:
+            Fn::ImportValue: !Join [":", [!Ref "ProjectName", "HostedZoneId"]]
+      ValidationMethod: DNS
+
+  ClientCertificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Ref "ClientDomainName"
+      DomainValidationOptions:
+        - DomainName: !Ref "ClientDomainName"
+          HostedZoneId:
+            Fn::ImportValue: !Join [":", [!Ref "ProjectName", "HostedZoneId"]]
+      ValidationMethod: DNS
+
+Outputs:
+  ServerCertificateArn:
+    Value: !Ref "ServerCertificate"
+    Export:
+      Name: !Join ["-", [!Ref "ProjectName", "ServerCertificateArn"]]
+      Description: SSL certificate ARN for the server
+
+  ClientCertificateArn:
+    Value: !Ref "ClientCertificate"
+    Export:
+      Name: !Join ["-", [!Ref "ProjectName", "ClientCertificateArn"]]
+      Description: SSL certificate ARN for the client

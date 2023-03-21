@@ -1,0 +1,176 @@
+# @format
+
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Create iam groups and a deployment user for the project
+
+Parameters:
+  ProjectName:
+    Type: String
+  ServerDomainName:
+    Type: String
+  ClientDomainName:
+    Type: String
+
+Mappings:
+  SubnetConfig:
+    VPC:
+      CIDR: "10.0.0.0/16"
+    PublicSubnetOne:
+      CIDR: "10.0.0.0/24"
+    PublicSubnetTwo:
+      CIDR: "10.0.1.0/24"
+
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !FindInMap ["SubnetConfig", "VPC", "CIDR"] #String
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: !Join ["-", [!Ref "ProjectName", "VPC"]]
+
+  PublicSubnetOne:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select
+        - 0
+        - !GetAZs
+          Ref: "AWS::Region"
+      CidrBlock: !FindInMap ["SubnetConfig", "PublicSubnetOne", "CIDR"] #String
+      MapPublicIpOnLaunch: true
+      VpcId: !Ref "VPC"
+      Tags:
+        - Key: Name
+          Value: !Join ["-", [!Ref "ProjectName", "SubnetOne"]]
+
+  PublicSubnetTwo:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select
+        - 1
+        - !GetAZs
+          Ref: "AWS::Region"
+      CidrBlock: !FindInMap ["SubnetConfig", "PublicSubnetTwo", "CIDR"] #String
+      MapPublicIpOnLaunch: true
+      VpcId: !Ref "VPC"
+      Tags:
+        - Key: Name
+          Value: !Join ["-", [!Ref "ProjectName", "SubnetTwo"]]
+
+  ClientSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Security Group for the client"
+      GroupName: "Client Security Group"
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: -1
+      SecurityGroupIngress:
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: -1
+      VpcId: !Ref "VPC"
+      Tags:
+        - Key: Name
+          Value: !Join ["-", [!Ref "ProjectName", "ClientSG"]]
+
+  ServerSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Security Group for the server"
+      GroupName: "Server Security Group"
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: -1
+      SecurityGroupIngress:
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: -1
+      VpcId: !Ref "VPC"
+      Tags:
+        - Key: Name
+          Value: !Join ["-", [!Ref "ProjectName", "ServerSG"]]
+
+  DatabaseSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Security Group for the Database"
+      GroupName: "Database Security Group"
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: -1
+      SecurityGroupIngress:
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: -1
+      VpcId: !Ref "VPC"
+      Tags:
+        - Key: Name
+          Value: !Join ["-", [!Ref "ProjectName", "DatabaseSG"]]
+
+  DemoInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Join ["-", [!Ref "ProjectName", "DemoInternetGateway"]]
+
+  DemoInternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref "DemoInternetGateway"
+      VpcId: !Ref "VPC"
+
+  DemoRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref "VPC"
+
+  DemoRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: "0.0.0.0/0"
+      GatewayId: !Ref "DemoInternetGateway"
+      RouteTableId: !Ref "DemoRouteTable"
+
+  PublicSubnetOneRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetOne
+      RouteTableId: !Ref DemoRouteTable
+  PublicSubnetTwoRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetTwo
+      RouteTableId: !Ref DemoRouteTable
+
+Outputs:
+  VPCId:
+    Description: The ID of the VPC that this stack is deployed in
+    Value: !Ref "VPC"
+    Export:
+      Name: !Join [":", [!Ref "ProjectName", "VPCId"]]
+  PublicSubnetOne:
+    Description: Public subnet one
+    Value: !Ref "PublicSubnetOne"
+    Export:
+      Name: !Join [":", [!Ref "ProjectName", "PublicSubnetOne"]]
+  PublicSubnetTwo:
+    Description: Public subnet two
+    Value: !Ref "PublicSubnetTwo"
+    Export:
+      Name: !Join [":", [!Ref "ProjectName", "PublicSubnetTwo"]]
+  ClientSG:
+    Description: Client Security Group
+    Value: !Ref "ClientSG"
+    Export:
+      Name: !Join [":", [!Ref "ProjectName", "ClientSG"]]
+  ServerSG:
+    Description: Server Security Group
+    Value: !Ref "ServerSG"
+    Export:
+      Name: !Join [":", [!Ref "ProjectName", "ServerSG"]]
+  DatabaseSG:
+    Description: Database Security Group
+    Value: !Ref "DatabaseSG"
+    Export:
+      Name: !Join [":", [!Ref "ProjectName", "DatabaseSG"]]

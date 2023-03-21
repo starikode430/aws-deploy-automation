@@ -1,0 +1,23 @@
+# @format
+
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Create the app SSL certificates
+
+Parameters:
+  ProjectName:
+    Type: String
+
+Resources:
+  EcsCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      CapacityProviders:
+        - FARGATE
+      ClusterName: !Ref "ProjectName"
+
+Outputs:
+  EcsCluster:
+    Description: Name of the ecs cluster
+    Value: !Ref "EcsCluster"
+    Export:
+      Name: EcsClusterName

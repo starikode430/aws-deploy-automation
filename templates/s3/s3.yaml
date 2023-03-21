@@ -1,0 +1,44 @@
+# @format
+
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Create the CICD resources (ECR)
+Parameters:
+  ProjectName:
+    Type: String
+
+Resources:
+  CodePipelineServerBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      AccessControl: Private
+      BucketName: !Join ["-", ["codepipeline", !Ref "ProjectName", "server"]]
+      LifecycleConfiguration:
+        Rules:
+          - Id: GlacierRule
+            Prefix: glacier
+            Status: Enabled
+            ExpirationInDays: 7
+            Transitions:
+              - TransitionInDays: 1
+                StorageClass: GLACIER
+      ObjectLockEnabled: false
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: True
+
+  CodePipelineClientBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      AccessControl: Private
+      BucketName: !Join ["-", ["codepipeline", !Ref "ProjectName", "client"]]
+      LifecycleConfiguration:
+        Rules:
+          - Id: GlacierRule
+            Prefix: glacier
+            Status: Enabled
+            ExpirationInDays: 7
+            Transitions:
+              - TransitionInDays: 1
+                StorageClass: GLACIER
+      ObjectLockEnabled: false
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: True

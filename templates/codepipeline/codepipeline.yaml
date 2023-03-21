@@ -1,0 +1,160 @@
+# @format
+
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Create the CICD resources (ECR)
+Parameters:
+  ProjectName:
+    Type: String
+  ServerDomainName:
+    Type: String
+  ClientDomainName:
+    Type: String
+
+Resources:
+  ServerRepositoryHook:
+    Type: AWS::CodePipeline::Webhook
+    Properties:
+      Authentication: GITHUB_HMAC
+      AuthenticationConfiguration:
+        SecretToken: "{{resolve:secretsmanager:nakajima-ec-server:SecretString:GITHUB_PASSWORD}}"
+      Filters:
+        - JsonPath: "$.ref"
+          MatchEquals: refs/heads/main
+      Name: ServerWebHook
+      RegisterWithThirdParty: "true"
+      TargetAction: Source
+      TargetPipeline: !Ref CodePipelineServer
+      TargetPipelineVersion: !GetAtt CodePipelineServer.Version
+
+  ClientRepositoryHook:
+    Type: AWS::CodePipeline::Webhook
+    Properties:
+      Authentication: GITHUB_HMAC
+      AuthenticationConfiguration:
+        SecretToken: "{{resolve:secretsmanager:nakajima-ec-server:SecretString:GITHUB_PASSWORD}}"
+      Filters:
+        - JsonPath: "$.ref"
+          MatchEquals: refs/heads/aws
+      Name: ClientWebHook
+      RegisterWithThirdParty: "true"
+      TargetAction: Source
+      TargetPipeline: !Ref CodePipelineClient
+      TargetPipelineVersion: !GetAtt CodePipelineClient.Version
+
+  CodePipelineServer:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      ArtifactStore:
+        Location: !Join ["-", ["codepipeline", !Ref "ProjectName", "server"]]
+        Type: S3
+      Name: !Join ["-", [!Ref "ProjectName", "server"]]
+      RestartExecutionOnUpdate: false
+      RoleArn: !ImportValue "CodePipelineRoleArn"
+      Stages:
+        - Actions:
+            - ActionTypeId:
+                Category: Source
+                Owner: ThirdParty
+                Version: "1"
+                Provider: GitHub
+              Configuration:
+                Owner: "{{resolve:secretsmanager:nakajima-ec-server:SecretString:GITHUB_REPO_OWNER}}"
+                Repo: "{{resolve:secretsmanager:nakajima-ec-server:SecretString:GITHUB_REPO_SERVER}}"
+                Branch: main
+                PollForSourceChanges: false
+                OAuthToken: "{{resolve:secretsmanager:nakajima-ec-server:SecretString:GITHUB_PASSWORD}}"
+              Name: Source
+              OutputArtifacts:
+                - Name: Source
+              RunOrder: 1
+          Name: Source
+
+        - Actions:
+            - ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: "1"
+              Configuration:
+                ProjectName: !Join ["-", [!Ref "ProjectName", "server"]]
+                PrimarySource: Source
+              Name: Build
+              InputArtifacts:
+                - Name: Source
+          Name: Build
+
+        - Actions:
+            - ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: CodeDeployToECS
+                Version: "1"
+              Configuration:
+                ApplicationName: !Join ["-", [!Ref "ProjectName", "server"]]
+                DeploymentGroupName: server
+                TaskDefinitionTemplateArtifact: Source
+                AppSpecTemplateArtifact: Source
+                AppSpecTemplatePath: build/codedeploy/appspec.yaml
+                TaskDefinitionTemplatePath: build/codedeploy/taskDef.json
+              Name: Deploy
+              InputArtifacts:
+                - Name: Source
+          Name: Deploy
+
+  CodePipelineClient:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      ArtifactStore:
+        Location: !Join ["-", ["codepipeline", !Ref "ProjectName", "client"]]
+        Type: S3
+      Name: !Join ["-", [!Ref "ProjectName", "client"]]
+      RestartExecutionOnUpdate: false
+      RoleArn: !ImportValue "CodePipelineRoleArn"
+      Stages:
+        - Actions:
+            - ActionTypeId:
+                Category: Source
+                Owner: ThirdParty
+                Version: "1"
+                Provider: GitHub
+              Configuration:
+                Owner: "{{resolve:secretsmanager:nakajima-ec-server:SecretString:GITHUB_REPO_OWNER}}"
+                Repo: "{{resolve:secretsmanager:nakajima-ec-server:SecretString:GITHUB_REPO_CLIENT}}"
+                Branch: aws #Change this after
+                PollForSourceChanges: false
+                OAuthToken: "{{resolve:secretsmanager:nakajima-ec-server:SecretString:GITHUB_PASSWORD}}"
+              Name: Source
+              OutputArtifacts:
+                - Name: Source
+              RunOrder: 1
+          Name: Source
+        - Actions:
+            - ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: "1"
+              Configuration:
+                ProjectName: !Join ["-", [!Ref "ProjectName", "client"]]
+                PrimarySource: Source
+              Name: Build
+              InputArtifacts:
+                - Name: Source
+          Name: Build
+        - Actions:
+            - ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: CodeDeployToECS
+                Version: "1"
+              Configuration:
+                ApplicationName: !Join ["-", [!Ref "ProjectName", "client"]]
+                DeploymentGroupName: client
+                TaskDefinitionTemplateArtifact: Source
+                AppSpecTemplateArtifact: Source
+                AppSpecTemplatePath: src/build/codedeploy/appspec.yaml
+                TaskDefinitionTemplatePath: src/build/codedeploy/taskDef.json
+              Name: Deploy
+              InputArtifacts:
+                - Name: Source
+          Name: Deploy

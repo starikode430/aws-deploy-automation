@@ -1,0 +1,216 @@
+# @format
+
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Set Up the cluster load balancing
+
+Parameters:
+  ProjectName:
+    Default: demo
+    Type: String
+
+Resources:
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      IpAddressType: ipv4
+      Name: !Join ["-", [!Ref "ProjectName", "ELB"]]
+      Scheme: internet-facing
+      SecurityGroups:
+        - Fn::ImportValue: !Join [":", [!Ref "ProjectName", "ServerSG"]]
+        - Fn::ImportValue: !Join [":", [!Ref "ProjectName", "ClientSG"]]
+        - Fn::ImportValue: !Join [":", [!Ref "ProjectName", "DatabaseSG"]]
+      Subnets:
+        - Fn::ImportValue: !Join [":", [!Ref "ProjectName", "PublicSubnetOne"]]
+        - Fn::ImportValue: !Join [":", [!Ref "ProjectName", "PublicSubnetTwo"]]
+      Type: application
+      Tags:
+        - Key: Name
+          Value: !Join ["-", [!Ref "ProjectName", "ELB"]]
+
+  ServerTargetGroup1:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckEnabled: true
+      HealthCheckIntervalSeconds: 30
+      HealthCheckPath: /health-check
+      HealthCheckPort: 8080
+      HealthCheckProtocol: HTTPS
+      HealthCheckTimeoutSeconds: 20
+      HealthyThresholdCount: 5
+      IpAddressType: ipv4
+      Name: !Join ["-", [!Ref "ProjectName", "server-1"]]
+      Port: 8080
+      Protocol: HTTPS
+      ProtocolVersion: HTTP1
+      TargetType: ip
+      UnhealthyThresholdCount: 3
+      VpcId:
+        Fn::ImportValue: !Join [":", [!Ref "ProjectName", "VPCId"]]
+      Tags:
+        - Key: Name
+          Value: !Join ["-", [!Ref "ProjectName", "ServerTargetGroup-1"]]
+
+  ServerTargetGroup2:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckEnabled: true
+      HealthCheckIntervalSeconds: 30
+      HealthCheckPath: /health-check
+      HealthCheckPort: 8080
+      HealthCheckProtocol: HTTPS
+      HealthCheckTimeoutSeconds: 20
+      HealthyThresholdCount: 5
+      IpAddressType: ipv4
+      Name: !Join ["-", [!Ref "ProjectName", "server-2"]]
+      Port: 8080
+      Protocol: HTTPS
+      ProtocolVersion: HTTP1
+      TargetType: ip
+      UnhealthyThresholdCount: 3
+      VpcId:
+        Fn::ImportValue: !Join [":", [!Ref "ProjectName", "VPCId"]]
+      Tags:
+        - Key: Name
+          Value: !Join ["-", [!Ref "ProjectName", "ServerTargetGroup-2"]]
+
+  ServerListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      Certificates:
+        - CertificateArn:
+            Fn::ImportValue:
+              !Join ["-", [!Ref "ProjectName", "ServerCertificateArn"]]
+      DefaultActions:
+        - TargetGroupArn: !Ref "ServerTargetGroup1"
+          Type: forward
+      LoadBalancerArn: !Ref "LoadBalancer"
+      Port: 8080
+      Protocol: HTTPS
+    DependsOn:
+      - ServerTargetGroup1
+      - LoadBalancer
+
+  ClientTargetGroup1:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckEnabled: true
+      HealthCheckIntervalSeconds: 30
+      HealthCheckPort: 80
+      HealthCheckProtocol: HTTP
+      HealthCheckPath: /
+      HealthCheckTimeoutSeconds: 20
+      HealthyThresholdCount: 5
+      IpAddressType: ipv4
+      Name: !Join ["-", [!Ref "ProjectName", "client-1"]]
+      Port: 443
+      Protocol: HTTPS
+      ProtocolVersion: HTTP1
+      TargetType: ip
+      UnhealthyThresholdCount: 3
+      VpcId:
+        Fn::ImportValue: !Join [":", [!Ref "ProjectName", "VPCId"]]
+      Tags:
+        - Key: Name
+          Value: !Join ["-", [!Ref "ProjectName", "ClientTargetGroup-1"]]
+
+  ClientTargetGroup2:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckEnabled: true
+      HealthCheckIntervalSeconds: 30
+      HealthCheckPort: 80
+      HealthCheckProtocol: HTTP
+      HealthCheckPath: /
+      HealthCheckTimeoutSeconds: 20
+      HealthyThresholdCount: 5
+      IpAddressType: ipv4
+      Name: !Join ["-", [!Ref "ProjectName", "client-2"]]
+      Port: 443
+      Protocol: HTTPS
+      ProtocolVersion: HTTP1
+      TargetType: ip
+      UnhealthyThresholdCount: 3
+      VpcId:
+        Fn::ImportValue: !Join [":", [!Ref "ProjectName", "VPCId"]]
+      Tags:
+        - Key: Name
+          Value: !Join ["-", [!Ref "ProjectName", "ClientTargetGroup-2"]]
+
+  ClientListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      Certificates:
+        - CertificateArn:
+            Fn::ImportValue:
+              !Join ["-", [!Ref "ProjectName", "ClientCertificateArn"]]
+      DefaultActions:
+        - TargetGroupArn: !Ref "ClientTargetGroup1"
+          Type: forward
+      LoadBalancerArn: !Ref "LoadBalancer"
+      Port: 443
+      Protocol: HTTPS
+    DependsOn:
+      - LoadBalancer
+      - ClientTargetGroup1
+
+  ClientListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref "ClientListener"
+      Priority: 2
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref "ServerTargetGroup2"
+      Conditions:
+        - Field: path-pattern
+          PathPatternConfig:
+            Values:
+              - "/v1/billing/webhook/*"
+    DependsOn:
+      - ClientListener
+      - ServerTargetGroup2
+
+Outputs:
+  LoadBalancerDnsName:
+    Description: DNS name of the load balancer
+    Value: !GetAtt "LoadBalancer.DNSName"
+    Export:
+      Name: !Join [":", [!Ref "ProjectName", "LoadBalancerDNSName"]]
+  LoadBalancerHostedZoneId:
+    Description: HostedZoneId of the load balancer
+    Value: !GetAtt "LoadBalancer.CanonicalHostedZoneID"
+    Export:
+      Name: !Join [":", [!Ref "ProjectName", "LoadBalancerHostedZoneId"]]
+  ServerTargetGroup1:
+    Description: Target Group for server instances
+    Value: !Ref "ServerTargetGroup1"
+    Export:
+      Name: ServerTargetGroup1Arn
+  ServerTargetGroup2:
+    Description: Target Group for server instances
+    Value: !Ref "ServerTargetGroup2"
+    Export:
+      Name: ServerTargetGroup2Arn
+  ClientTargetGroup1:
+    Description: Target Group for client instances
+    Value: !Ref "ClientTargetGroup1"
+    Export:
+      Name: ClientTargetGroup1Arn
+  ClientTargetGroup2:
+    Description: Target Group for client instances
+    Value: !Ref "ClientTargetGroup2"
+    Export:
+      Name: ClientTargetGroup2Arn
+  ServerListener:
+    Description: Target Group for client instances
+    Value: !Ref "ServerListener"
+    Export:
+      Name: ServerListenerArn
+  ClientListener:
+    Description: Target Group for client instances
+    Value: !Ref "ClientListener"
+    Export:
+      Name: ClientListenerArn
+  ClientListenerRule:
+    Description: Target Group for client instances
+    Value: !Ref "ClientListenerRule"

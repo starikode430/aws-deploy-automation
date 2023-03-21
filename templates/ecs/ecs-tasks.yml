@@ -1,0 +1,93 @@
+# @format
+
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Create the task definitions for the ecs Cluster
+
+Parameters:
+  ProjectName:
+    Type: String
+
+Resources:
+  ClientTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      ContainerDefinitions:
+        - Name: !Join ["-", [!Ref "ProjectName", "Client"]]
+          Cpu: 256
+          Memory: 512
+          Image:
+            Fn::Join: [":", [!ImportValue ClientRepositoryURI, "latest"]]
+          HealthCheck:
+            Command: ["CMD-SHELL", "curl --fail http://localhost:80 || exit 1"]
+            Interval: 30
+            Retries: 8
+            Timeout: 10
+            StartPeriod: 30
+          PortMappings:
+            - ContainerPort: 443
+              HostPort: 443
+            - ContainerPort: 80
+              HostPort: 80
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-create-group: true
+              awslogs-group: ecs
+              awslogs-region: ap-northeast-1
+              awslogs-stream-prefix: client
+      Cpu: 256
+      ExecutionRoleArn: !ImportValue "ClientExecutionRoleArn"
+      TaskRoleArn: !ImportValue "ClientTaskRoleArn"
+      Memory: 512
+      NetworkMode: awsvpc
+      Tags:
+        - Key: Name
+          Value: !Join ["-", [!Ref "ProjectName", "client"]]
+
+  ServerTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      ExecutionRoleArn: !ImportValue "ServerExecutionRoleArn"
+      TaskRoleArn: !ImportValue "ServerTaskRoleArn"
+      Cpu: 256
+      Memory: 512
+      NetworkMode: awsvpc
+      ContainerDefinitions:
+        - Name: !Join ["-", [!Ref "ProjectName", "Server"]]
+          Cpu: 256
+          Memory: 512
+          Image:
+            Fn::Join: [":", [!ImportValue ServerRepositoryURI, "latest"]]
+          HealthCheck:
+            Command:
+              ["CMD-SHELL", "echo"]
+              # "curl --fail https://localhost:8080/health || exit 1",
+            Interval: 30
+            Retries: 8
+            Timeout: 10
+            StartPeriod: 30
+          PortMappings:
+            - ContainerPort: 8080
+              HostPort: 8080
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-create-group: true
+              awslogs-group: ecs
+              awslogs-region: ap-northeast-1
+              awslogs-stream-prefix: server
+      Tags:
+        - Key: Name
+          Value: !Join ["-", [!Ref "ProjectName", "server"]]
+
+Outputs:
+  ServerTaskDefinition:
+    Description: Task definition for the server
+    Value: !Ref "ServerTaskDefinition"
+    Export:
+      Name: ServerTaskDefinitionArn
+  ClientTaskDefinition:
+    Description: Task definition for the client
+    Value: !Ref "ClientTaskDefinition"
+    Export:
+      Name: ClientTaskDefinitionArn

@@ -1,0 +1,63 @@
+# @format
+
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Create the CICD resources (ECR)
+Parameters:
+  ProjectName:
+    Type: String
+  ServerDomainName:
+    Type: String
+  ClientDomainName:
+    Type: String
+  ServerBuildSpecFilePath:
+    Type: String
+  ClientBuildSpecFilePath:
+    Type: String
+Resources:
+  ServerBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Artifacts:
+        Type: CODEPIPELINE
+      Description: Build the server application
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        ImagePullCredentialsType: CODEBUILD
+        Image: aws/codebuild/standard:4.0
+        PrivilegedMode: true
+        Type: LINUX_CONTAINER
+      LogsConfig:
+        CloudWatchLogs:
+          GroupName: build
+          Status: ENABLED
+          StreamName: server
+      Name: !Join ["-", [!Ref "ProjectName", "server"]]
+      ResourceAccessRole: !ImportValue "CodeBuildRoleArn"
+      ServiceRole: !ImportValue "CodeBuildRoleArn"
+      Source:
+        BuildSpec: !Ref "ServerBuildSpecFilePath"
+        Type: CODEPIPELINE
+
+  ClientBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Artifacts:
+        Type: CODEPIPELINE
+      Description: Build the client application
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        ImagePullCredentialsType: CODEBUILD
+        Image: aws/codebuild/standard:4.0
+        PrivilegedMode: true
+        Type: LINUX_CONTAINER
+      LogsConfig:
+        CloudWatchLogs:
+          GroupName: build
+          Status: ENABLED
+          StreamName: client
+      Name: !Join ["-", [!Ref "ProjectName", "client"]]
+      ResourceAccessRole: !ImportValue "CodeBuildRoleArn"
+      ServiceRole: !ImportValue "CodeBuildRoleArn"
+      Source:
+        BuildSpec: !Ref "ClientBuildSpecFilePath"
+        Type: CODEPIPELINE

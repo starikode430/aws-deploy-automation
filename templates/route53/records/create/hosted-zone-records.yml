@@ -1,0 +1,42 @@
+# @format
+
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Create the app SSL certificates
+
+Parameters:
+  ProjectName:
+    Type: String
+  ServerDomainName:
+    Type: String
+  ClientDomainName:
+    Type: String
+  DomainName:
+    Type: String
+
+Resources:
+  # Create dummy records first and then update them later after.
+  # The load balancer has been created.
+  ServerRoute53RecordForELB:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId:
+        Fn::ImportValue: !Join [":", [!Ref "ProjectName", "HostedZoneId"]]
+      Name: !Ref "ServerDomainName"
+      ResourceRecords: # Create a fake record first
+        - 192.0.2.255
+        # - !Ref "DomainName"
+      TTL: 300
+      Type: A
+
+  ClientRoute53RecordForELB:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId:
+        Fn::ImportValue: !Join [":", [!Ref "ProjectName", "HostedZoneId"]]
+      Name: !Ref "ClientDomainName"
+      ResourceRecords: # Create a fake record first
+        - 192.0.2.252
+        # - !Ref "DomainName"
+      TTL: 300
+      Type: A
+# At this point the entire app should be deployed

@@ -1,0 +1,425 @@
+# @format
+
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Create iam groups and a deployment user for the project
+
+Parameters:
+  DeploymentName:
+    Type: String
+  ECRName:
+    Type: String
+
+Resources:
+  # Define different User groups based on responsibility
+  NetworkUserGroup:
+    Type: AWS::IAM::Group
+    Properties:
+      GroupName: networking
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonVPCFullAccess
+        - arn:aws:iam::aws:policy/AWSCertificateManagerFullAccess
+        - arn:aws:iam::aws:policy/AWSCloudMapFullAccess
+        - arn:aws:iam::aws:policy/AmazonRoute53FullAccess
+
+  ComputingUserGroup:
+    Type: AWS::IAM::Group
+    Properties:
+      GroupName: computing
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonECS_FullAccess
+        - arn:aws:iam::aws:policy/ElasticLoadBalancingFullAccess
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryFullAccess
+
+  StorageUserGroup:
+    Type: AWS::IAM::Group
+    Properties:
+      GroupName: storage
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+
+  CicdUserGroup:
+    Type: AWS::IAM::Group
+    Properties:
+      GroupName: cicd
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSCloudFormationFullAccess
+        - arn:aws:iam::aws:policy/SecretsManagerReadWrite
+        - arn:aws:iam::aws:policy/AWSCodeBuildAdminAccess
+        - arn:aws:iam::aws:policy/AWSCodeDeployFullAccess
+        - arn:aws:iam::aws:policy/AWSCodePipelineFullAccess
+
+  DatabaseUserGroup:
+    Type: AWS::IAM::Group
+    Properties:
+      GroupName: database
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonRDSFullAccess
+
+  # Define the delpoyment user and add to the created groups
+  DeploymentUser:
+    Type: AWS::IAM::User
+    Properties:
+      Groups:
+        - !Ref "NetworkUserGroup"
+        - !Ref "DatabaseUserGroup"
+        - !Ref "ComputingUserGroup"
+        - !Ref "CicdUserGroup"
+        - !Ref "StorageUserGroup"
+      UserName: !Ref "DeploymentName"
+
+  ecrUser:
+    Type: AWS::IAM::User
+    Properties:
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryFullAccess
+      UserName: !Ref "ECRName"
+
+  # Define Execution Roles for services
+  ClientExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ecs-tasks.amazonaws.com
+            Action:
+              - "sts:AssumeRole"
+      Description: "Allow the client task to pull an ECR image and publish logs to cloud watch"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+        - arn:aws:iam::aws:policy/CloudWatchFullAccess
+      RoleName: clientExecutionRole
+
+  ServerExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ecs-tasks.amazonaws.com
+            Action:
+              - "sts:AssumeRole"
+      Description: "Allow the server task to pull an ECR image"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+        - arn:aws:iam::aws:policy/CloudWatchFullAccess
+      RoleName: serverExecutionRole
+
+  # This Role is a mock for container services, this allows users to added managed
+  # policies to containers for uses of certain aws services.
+  ServerTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ecs-tasks.amazonaws.com
+            Action:
+              - "sts:AssumeRole"
+      Description: "Allow the server task to publish logs to cloud watch"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/CloudWatchFullAccess
+        - arn:aws:iam::aws:policy/AmazonESCognitoAccess
+      RoleName: serverTaskRole
+
+  # This Role is a mock for container services, this allows users to added managed
+  # policies to containers for uses of certain aws services.
+  ClientTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ecs-tasks.amazonaws.com
+            Action:
+              - "sts:AssumeRole"
+      Description: "Allow the client task to publish logs to cloud watch"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/CloudWatchFullAccess
+      RoleName: clientTaskRole
+
+  CodeBuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - codebuild.amazonaws.com
+            Action:
+              - "sts:AssumeRole"
+      Description: "Allow CodeBuild access to S3,CloudWatch,ECR and Secrets Manager"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SecretsManagerReadWrite
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryFullAccess
+      RoleName: codeBuildRole
+
+  CodeDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - codedeploy.amazonaws.com
+            Action:
+              - "sts:AssumeRole"
+      Description: "Allow CodeBuild access to ECS"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSCodeDeployRoleForECS
+      RoleName: codeDeployRole
+
+  CodePipelineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - codepipeline.amazonaws.com
+            Action:
+              - "sts:AssumeRole"
+      Description: "CodePipeline policy"
+      RoleName: codePipelineRole
+
+  CustomPolicyForDeploymentIamRequirements:
+    DependsOn:
+      - DeploymentUser
+    Type: AWS::IAM::Policy
+    Properties:
+      Users:
+        - !Ref "DeploymentUser"
+      PolicyName: CustomPolicyForDeploymentIamRequirements
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Action:
+              - iam:PassRole
+            Resource: "*"
+            Effect: Allow
+            Condition:
+              StringEqualsIfExists:
+                iam:PassedToService:
+                  - cloudformation.amazonaws.com
+                  - elasticbeanstalk.amazonaws.com
+                  - ec2.amazonaws.com
+                  - ecs-tasks.amazonaws.com
+                  - codebuild.amazonaws.com
+                  - codedeploy.amazonaws.com
+                  - codepipeline.amazonaws.com
+
+  CodeBuildPolicy:
+    DependsOn:
+      - CodeBuildRole
+    Type: AWS::IAM::Policy
+    Properties:
+      Roles:
+        - codeBuildRole
+      PolicyName: CodeBuildPolicy
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+            Resource: "*"
+            Effect: Allow
+          - Action:
+              - s3:PutObject
+              - s3:GetObject
+              - s3:GetObjectVersion
+              - s3:GetBucketAcl
+              - s3:GetBucketLocation
+            Resource: "*"
+            Effect: Allow
+          - Action:
+              - codebuild:CreateReportGroup
+              - codebuild:CreateReport
+              - codebuild:UpdateReport
+              - codebuild:BatchPutTestCases
+              - codebuild:BatchPutCodeCoverages
+            Resource: "*"
+            Effect: Allow
+
+  CodepipelinePolicy:
+    DependsOn:
+      - CodePipelineRole
+    Type: AWS::IAM::Policy
+    Properties:
+      Roles:
+        - codePipelineRole
+      PolicyName: CodepipelinePolicy
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Action:
+              - iam:PassRole
+            Resource: "*"
+            Effect: Allow
+            Condition:
+              StringEqualsIfExists:
+                iam:PassedToService:
+                  - cloudformation.amazonaws.com
+                  - elasticbeanstalk.amazonaws.com
+                  - ec2.amazonaws.com
+                  - ecs-tasks.amazonaws.com
+          - Action:
+              - codecommit:CancelUploadArchive
+              - codecommit:GetBranch
+              - codecommit:GetCommit
+              - codecommit:GetRepository
+              - codecommit:GetUploadArchiveStatus
+              - codecommit:UploadArchive
+            Resource: "*"
+            Effect: Allow
+          - Action:
+              - codedeploy:CreateDeployment
+              - codedeploy:GetApplication
+              - codedeploy:GetApplicationRevision
+              - codedeploy:GetDeployment
+              - codedeploy:GetDeploymentConfig
+              - codedeploy:RegisterApplicationRevision
+            Resource: "*"
+            Effect: Allow
+          - Action:
+              - codestar-connections:UseConnection
+            Resource: "*"
+            Effect: Allow
+          - Action:
+              - ec2:*
+              - elasticloadbalancing:*
+              - cloudwatch:*
+              - s3:*
+              - cloudformation:*
+              - ecs:*
+            Resource: "*"
+            Effect: Allow
+          - Action:
+              - lambda:InvokeFunction
+              - lambda:ListFunctions
+            Resource: "*"
+            Effect: Allow
+          - Action:
+              - opsworks:CreateDeployment
+              - opsworks:DescribeApps
+              - opsworks:DescribeCommands
+              - opsworks:DescribeDeployments
+              - opsworks:DescribeInstances
+              - opsworks:DescribeStacks
+              - opsworks:UpdateApp
+              - opsworks:UpdateStack
+            Resource: "*"
+            Effect: Allow
+          - Action:
+              - cloudformation:CreateStack
+              - cloudformation:DeleteStack
+              - cloudformation:DescribeStacks
+              - cloudformation:UpdateStack
+              - cloudformation:CreateChangeSet
+              - cloudformation:DeleteChangeSet
+              - cloudformation:DescribeChangeSet
+              - cloudformation:ExecuteChangeSet
+              - cloudformation:SetStackPolicy
+              - cloudformation:ValidateTemplate
+            Resource: "*"
+            Effect: Allow
+          - Action:
+              - codebuild:BatchGetBuilds
+              - codebuild:StartBuild
+              - codebuild:BatchGetBuildBatches
+              - codebuild:StartBuildBatch
+            Resource: "*"
+            Effect: Allow
+          - Effect: Allow
+            Action:
+              - devicefarm:ListProjects
+              - devicefarm:ListDevicePools
+              - devicefarm:GetRun
+              - devicefarm:GetUpload
+              - devicefarm:CreateUpload
+              - devicefarm:ScheduleRun
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - servicecatalog:ListProvisioningArtifacts
+              - servicecatalog:CreateProvisioningArtifact
+              - servicecatalog:DescribeProvisioningArtifact
+              - servicecatalog:DeleteProvisioningArtifact
+              - servicecatalog:UpdateProduct
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - cloudformation:ValidateTemplate
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - ecr:DescribeImages
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - states:DescribeExecution
+              - states:DescribeStateMachine
+              - states:StartExecution
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - appconfig:StartDeployment
+              - appconfig:StopDeployment
+              - appconfig:GetDeployment
+            Resource: "*"
+
+Outputs:
+  ClientTaskExecutionRole:
+    Description: Allow the server task to publish logs to cloud watch
+    Value: !GetAtt "ClientExecutionRole.Arn"
+    Export:
+      Name: ClientExecutionRoleArn
+  ServerTaskExecutionRole:
+    Description: Allow the server task to publish logs to cloud watch
+    Value: !GetAtt "ServerExecutionRole.Arn"
+    Export:
+      Name: ServerExecutionRoleArn
+  ServerTaskRole:
+    Description: Allow the server task to publish logs to cloud watch
+    Value: !GetAtt "ServerTaskRole.Arn"
+    Export:
+      Name: ServerTaskRoleArn
+  ClientTaskRole:
+    Description: Allow the client task to publish logs to cloud watch
+    Value: !GetAtt "ClientTaskRole.Arn"
+    Export:
+      Name: ClientTaskRoleArn
+  CodeBuildRole:
+    Description: CodeBuild IAM service role
+    Value: !GetAtt "CodeBuildRole.Arn"
+    Export:
+      Name: CodeBuildRoleArn
+  CodeDeployRole:
+    Description: CodeDeployRole IAM service role
+    Value: !GetAtt "CodeDeployRole.Arn"
+    Export:
+      Name: CodeDeployRoleArn
+  CodePipelineRole:
+    Description: CodePipeline IAM service role
+    Value: !GetAtt "CodePipelineRole.Arn"
+    Export:
+      Name: CodePipelineRoleArn

@@ -1,0 +1,26 @@
+# @format
+
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Create the CICD resources (ECR)
+
+Resources:
+  ServerRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: server
+  ClientRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: client
+
+Outputs:
+  ClientRepositoryURI:
+    Description: "The URI of the client repository"
+    Value: !GetAtt "ClientRepository.RepositoryUri"
+    Export:
+      Name: ClientRepositoryURI
+  ServerRepositoryURI:
+    Description: The name of the ECS cluster
+    Value: !GetAtt "ServerRepository.RepositoryUri"
+    Export:
+      Name: ServerRepositoryURI

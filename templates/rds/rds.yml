@@ -1,0 +1,70 @@
+# @format
+
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Create iam groups and a deployment user for the project
+
+Parameters:
+  ProjectName:
+    Type: String
+  SecretManagerName:
+    Type: String
+
+Resources:
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: "Subnet for RDS"
+      DBSubnetGroupName: demo-db-subnet-group
+      SubnetIds:
+        - Fn::ImportValue: !Join [":", [!Ref "ProjectName", "PublicSubnetOne"]]
+        - Fn::ImportValue: !Join [":", [!Ref "ProjectName", "PublicSubnetTwo"]]
+
+  DemoDB:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBName:
+        !Join [
+          "",
+          [
+            "{{resolve:secretsmanager:",
+            !Ref "SecretManagerName",
+            "::DB_NAME}}",
+          ],
+        ]
+      AllocatedStorage: 20
+      DBInstanceClass: db.t2.micro
+      DBSubnetGroupName: !Ref "DBSubnetGroup"
+      DBInstanceIdentifier: !Ref "ProjectName"
+      Engine: "postgres"
+      EngineVersion: "12"
+      MasterUsername:
+        !Join [
+          "",
+          [
+            "{{resolve:secretsmanager:",
+            !Ref "SecretManagerName",
+            "::DB_USER}}",
+          ],
+        ]
+      MasterUserPassword:
+        !Join [
+          "",
+          [
+            "{{resolve:secretsmanager:",
+            !Ref "SecretManagerName",
+            "::DB_PASSWORD}}",
+          ],
+        ]
+      MultiAZ: "false"
+      PubliclyAccessible: "true"
+      Port:
+        !Join [
+          "",
+          [
+            "{{resolve:secretsmanager:",
+            !Ref "SecretManagerName",
+            "::DB_PORT}}",
+          ],
+        ]
+      VPCSecurityGroups:
+        - Fn::ImportValue: !Join [":", [!Ref "ProjectName", "DatabaseSG"]]

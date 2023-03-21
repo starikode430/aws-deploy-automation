@@ -1,0 +1,86 @@
+# @format
+
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Create the CICD resources (ECR)
+Parameters:
+  ProjectName:
+    Type: String
+  ServerDomainName:
+    Type: String
+  ClientDomainName:
+    Type: String
+
+Resources:
+  ServerDeployApp:
+    Type: AWS::CodeDeploy::Application
+    Properties:
+      ApplicationName: !Join ["-", [!Ref "ProjectName", "server"]]
+      ComputePlatform: ECS
+
+  ServerDeploymentGroup:
+    DependsOn:
+      - ServerDeployApp
+    Type: AWS::CodeDeploy::DeploymentGroup
+    Properties:
+      ApplicationName: !Join ["-", [!Ref "ProjectName", "server"]]
+      DeploymentConfigName: CodeDeployDefault.ECSAllAtOnce
+      DeploymentGroupName: server
+      DeploymentStyle:
+        DeploymentOption: WITH_TRAFFIC_CONTROL
+        DeploymentType: BLUE_GREEN
+      BlueGreenDeploymentConfiguration:
+        DeploymentReadyOption:
+          ActionOnTimeout: CONTINUE_DEPLOYMENT
+          WaitTimeInMinutes: 0
+        TerminateBlueInstancesOnDeploymentSuccess:
+          Action: TERMINATE
+          TerminationWaitTimeInMinutes: 0
+      ECSServices:
+        - ClusterName: !Ref "ProjectName"
+          ServiceName: server
+      LoadBalancerInfo:
+        TargetGroupPairInfoList:
+          - ProdTrafficRoute:
+              ListenerArns:
+                - !ImportValue "ServerListenerArn"
+            TargetGroups:
+              - Name: !Join ["-", [!Ref "ProjectName", "server-1"]]
+              - Name: !Join ["-", [!Ref "ProjectName", "server-2"]]
+      ServiceRoleArn: !ImportValue "CodeDeployRoleArn"
+
+  ClientDeployApp:
+    Type: AWS::CodeDeploy::Application
+    Properties:
+      ApplicationName: !Join ["-", [!Ref "ProjectName", "client"]]
+      ComputePlatform: ECS
+
+  ClientDeploymentGroup:
+    DependsOn:
+      - ClientDeployApp
+    Type: AWS::CodeDeploy::DeploymentGroup
+    Properties:
+      ApplicationName: !Join ["-", [!Ref "ProjectName", "client"]]
+      DeploymentConfigName: CodeDeployDefault.ECSAllAtOnce
+      DeploymentGroupName: client
+      DeploymentStyle:
+        DeploymentOption: WITH_TRAFFIC_CONTROL
+        DeploymentType: BLUE_GREEN
+      BlueGreenDeploymentConfiguration:
+        DeploymentReadyOption:
+          ActionOnTimeout: CONTINUE_DEPLOYMENT
+          WaitTimeInMinutes: 0
+        TerminateBlueInstancesOnDeploymentSuccess:
+          Action: TERMINATE
+          TerminationWaitTimeInMinutes: 0
+      ECSServices:
+        - ClusterName: !Ref "ProjectName"
+          ServiceName: client
+      LoadBalancerInfo:
+        TargetGroupPairInfoList:
+          - ProdTrafficRoute:
+              ListenerArns:
+                - !ImportValue "ClientListenerArn"
+            TargetGroups:
+              - Name: !Join ["-", [!Ref "ProjectName", "client-1"]]
+              - Name: !Join ["-", [!Ref "ProjectName", "client-2"]]
+      ServiceRoleArn: !ImportValue "CodeDeployRoleArn"

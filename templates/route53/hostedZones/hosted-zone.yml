@@ -1,0 +1,23 @@
+# @format
+
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Create iam groups and a deployment user for the project
+
+Parameters:
+  ProjectName:
+    Type: String
+  DomainName:
+    Type: String
+
+Resources:
+  HostedZone:
+    Type: AWS::Route53::HostedZone
+    Properties:
+      Name: !Ref "DomainName"
+
+Outputs:
+  HostedZoneId:
+    Description: HostedZone ID
+    Value: !GetAtt "HostedZone.Id"
+    Export:
+      Name: !Join [":", [!Ref "ProjectName", "HostedZoneId"]]

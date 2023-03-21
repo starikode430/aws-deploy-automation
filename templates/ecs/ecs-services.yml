@@ -1,0 +1,79 @@
+# @format
+
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Create the app SSL certificates
+
+Parameters:
+  ProjectName:
+    Type: String
+  ServerDomainName:
+    Type: String
+  ClientDomainName:
+    Type: String
+
+Resources:
+  ServerEcsService:
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster:
+        Fn::ImportValue: "EcsClusterName"
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+      DeploymentController:
+        Type: CODE_DEPLOY
+      DesiredCount: 1
+      HealthCheckGracePeriodSeconds: 100
+      LaunchType: FARGATE
+      PlatformVersion: "1.4.0"
+      LoadBalancers:
+        - ContainerName: !Join ["-", [!Ref "ProjectName", "Server"]]
+          ContainerPort: 8080
+          TargetGroupArn:
+            Fn::ImportValue: "ServerTargetGroup1Arn"
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups:
+            - Fn::ImportValue: !Join [":", [!Ref "ProjectName", "ServerSG"]]
+          Subnets:
+            - Fn::ImportValue:
+                !Join [":", [!Ref "ProjectName", "PublicSubnetOne"]]
+            - Fn::ImportValue:
+                !Join [":", [!Ref "ProjectName", "PublicSubnetTwo"]]
+      ServiceName: server
+      TaskDefinition:
+        Fn::ImportValue: "ServerTaskDefinitionArn"
+
+  ClientEcsService:
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster:
+        Fn::ImportValue: "EcsClusterName"
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+      DeploymentController:
+        Type: CODE_DEPLOY
+      DesiredCount: 1
+      HealthCheckGracePeriodSeconds: 100
+      LaunchType: FARGATE
+      PlatformVersion: "1.4.0"
+      LoadBalancers:
+        - ContainerName: !Join ["-", [!Ref "ProjectName", "Client"]]
+          ContainerPort: 443
+          TargetGroupArn:
+            Fn::ImportValue: "ClientTargetGroup1Arn"
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups:
+            - Fn::ImportValue: !Join [":", [!Ref "ProjectName", "ClientSG"]]
+          Subnets:
+            - Fn::ImportValue:
+                !Join [":", [!Ref "ProjectName", "PublicSubnetOne"]]
+            - Fn::ImportValue:
+                !Join [":", [!Ref "ProjectName", "PublicSubnetTwo"]]
+      ServiceName: client
+      TaskDefinition:
+        Fn::ImportValue: "ClientTaskDefinitionArn"

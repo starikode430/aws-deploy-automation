@@ -1,0 +1,48 @@
+# @format
+
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Create the app SSL certificates
+
+Parameters:
+  ProjectName:
+    Type: String
+  ServerDomainName:
+    Type: String
+  ClientDomainName:
+    Type: String
+  AppEnv:
+    Default: aws
+    Type: String
+
+Resources:
+  ServerRoute53RecordForELB:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      AliasTarget:
+        DNSName:
+          Fn::ImportValue:
+            !Join [":", [!Ref "ProjectName", "LoadBalancerDNSName"]]
+        HostedZoneId:
+          Fn::ImportValue:
+            !Join [":", [!Ref "ProjectName", "LoadBalancerHostedZoneId"]]
+      HostedZoneId:
+        Fn::ImportValue: !Join [":", [!Ref "ProjectName", "HostedZoneId"]]
+      Name: !Ref "ServerDomainName"
+      Type: A
+
+  ClientRoute53RecordForELB:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      AliasTarget:
+        DNSName:
+          Fn::ImportValue:
+            !Join [":", [!Ref "ProjectName", "LoadBalancerDNSName"]]
+        HostedZoneId:
+          Fn::ImportValue:
+            !Join [":", [!Ref "ProjectName", "LoadBalancerHostedZoneId"]]
+      HostedZoneId:
+        Fn::ImportValue: !Join [":", [!Ref "ProjectName", "HostedZoneId"]]
+      Name: !Ref "ClientDomainName"
+      Type: A
+# At this point the entire app should be deployed
+
